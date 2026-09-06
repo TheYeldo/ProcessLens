@@ -11,8 +11,9 @@ ProcessLens is a small dark desktop widget for Windows 10 and Windows 11. It rea
 - Live search by executable name or PID and a process details panel.
 - Confirmed, user-initiated process termination with access-denied handling.
 - Frameless resizable dark window, Windows 11 rounded corners, per-monitor DPI V2, and multi-monitor position recovery.
-- Always-on-top and click-through modes. The tray icon or `Ctrl+Alt+P` always restores interaction.
-- A Start Menu launcher shortcut makes `Ctrl+Alt+P` start ProcessLens even when it is not running; subsequent launches activate the existing single instance.
+- Always-on-top and click-through modes. The tray icon or `Ctrl+Alt+O` always restores interaction.
+- ProcessLens starts hidden at user sign-in by default, keeping `Ctrl+Alt+O` available without showing a window. The tray menu can disable **Start with Windows**.
+- A regular Start Menu launcher is installed for manual starts; subsequent launches activate the existing single instance.
 - Refresh intervals of 250, 500, 1000, and 2000 ms; 1000 ms is the default.
 - Local JSON settings in `%LOCALAPPDATA%\ProcessLens\config.json`.
 
@@ -87,7 +88,7 @@ If `cmake` or `cl` is not visible in an ordinary PowerShell, use **Developer Pow
 - Click the search field and type a process name or PID. `Esc` closes details first, then clears search.
 - Click a row for details. **End Process** always displays a confirmation prompt and never elevates the application.
 - Right-click the tray icon for mode, topmost, click-through, refresh-rate, and exit controls.
-- Press `Ctrl+Alt+P` from anywhere. On first run ProcessLens installs a per-user Start Menu shortcut that lets Windows launch it while closed; while running, the same hotkey reveals the existing window.
+- Press `Ctrl+Alt+O` from anywhere to reveal ProcessLens. On first run it creates per-user Start Menu and Startup shortcuts; the Startup entry launches it hidden at sign-in so the system-wide hotkey remains registered. Disable this behavior with **Start with Windows** in the tray menu.
 - Closing the custom title bar hides the window to the tray. Choose **Exit** from the tray to stop the application.
 
 ## Performance

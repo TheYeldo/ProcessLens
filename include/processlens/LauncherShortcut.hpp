@@ -4,8 +4,9 @@
 
 namespace processlens {
 
-// Creates/updates a Start Menu shortcut whose shell hotkey is Ctrl+Alt+P.
-// The shortcut allows Windows Explorer to start ProcessLens even when it is not running.
+// Creates/updates the regular per-user Start Menu launcher.
 bool EnsureLauncherShortcut(std::filesystem::path* shortcutPath = nullptr) noexcept;
+bool SetStartupEnabled(bool enabled) noexcept;
+bool IsStartupEnabled() noexcept;
 
 } // namespace processlens

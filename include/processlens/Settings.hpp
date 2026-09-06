@@ -15,6 +15,7 @@ struct Settings {
     ViewMode mode{ViewMode::Compact};
     bool alwaysOnTop{false};
     bool clickThrough{false};
+    bool startWithWindows{true};
     int refreshIntervalMs{1000};
 
     [[nodiscard]] std::string ToJson() const;

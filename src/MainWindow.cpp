@@ -1,6 +1,7 @@
 #include "processlens/MainWindow.hpp"
 
 #include "processlens/Formatting.hpp"
+#include "processlens/LauncherShortcut.hpp"
 #include "processlens/Logging.hpp"
 #include "processlens/WindowProtocol.hpp"
 
@@ -26,6 +27,7 @@ enum Command : UINT {
     CommandExpanded,
     CommandAlwaysOnTop,
     CommandClickThrough,
+    CommandStartWithWindows,
     CommandRefresh250,
     CommandRefresh500,
     CommandRefresh1000,
@@ -49,7 +51,9 @@ void ApplyRoundedCorners(HWND window, float scale) {
 } // namespace
 
 MainWindow::MainWindow(HINSTANCE instance)
-    : instance_(instance), settings_(Settings::Load()) {}
+    : instance_(instance), settings_(Settings::Load()) {
+    settings_.startWithWindows = IsStartupEnabled();
+}
 
 MainWindow::~MainWindow() {
     if (collector_) collector_->Stop();
@@ -83,7 +87,9 @@ bool MainWindow::Create() {
     ApplyRoundedCorners(window_, Scale());
     taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
     AddTrayIcon();
-    RegisterHotKey(window_, HotkeyRestore, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'P');
+    if (!RegisterHotKey(window_, HotkeyRestore, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'O')) {
+        LogWarningOnce(L"global-hotkey", L"Ctrl+Alt+O is already registered by another application");
+    }
     collector_ = std::make_unique<MetricsCollector>([this] {
         if (window_) PostMessageW(window_, MessageMetrics, 0, 0);
     });
@@ -93,8 +99,8 @@ bool MainWindow::Create() {
 }
 
 void MainWindow::Show(int commandShow) {
-    ShowWindow(window_, commandShow == SW_HIDE ? SW_SHOWNORMAL : commandShow);
-    UpdateWindow(window_);
+    ShowWindow(window_, commandShow);
+    if (commandShow != SW_HIDE) UpdateWindow(window_);
 }
 
 float MainWindow::Scale() const noexcept {
@@ -243,6 +249,7 @@ LRESULT MainWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         case CommandExpanded: SetMode(ViewMode::Expanded); break;
         case CommandAlwaysOnTop: SetAlwaysOnTop(!settings_.alwaysOnTop); break;
         case CommandClickThrough: SetClickThrough(!settings_.clickThrough); break;
+        case CommandStartWithWindows: SetStartWithWindows(!settings_.startWithWindows); break;
         case CommandRefresh250: SetRefreshInterval(250); break;
         case CommandRefresh500: SetRefreshInterval(500); break;
         case CommandRefresh1000: SetRefreshInterval(1000); break;
@@ -400,6 +407,16 @@ void MainWindow::SetClickThrough(bool enabled) {
     settings_.Save();
 }
 
+void MainWindow::SetStartWithWindows(bool enabled) {
+    if (!SetStartupEnabled(enabled)) {
+        MessageBoxW(window_, L"Windows could not update the per-user startup shortcut.",
+                    L"ProcessLens", MB_OK | MB_ICONERROR);
+        return;
+    }
+    settings_.startWithWindows = enabled;
+    settings_.Save();
+}
+
 void MainWindow::SetRefreshInterval(int milliseconds) {
     settings_.refreshIntervalMs = milliseconds;
     if (collector_) collector_->SetInterval(std::chrono::milliseconds(milliseconds));
@@ -414,7 +431,7 @@ void MainWindow::AddTrayIcon() {
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     data.uCallbackMessage = MessageTray;
     data.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-    wcscpy_s(data.szTip, L"ProcessLens — Ctrl+Alt+P restores interaction");
+    wcscpy_s(data.szTip, L"ProcessLens — Ctrl+Alt+O restores interaction");
     trayAdded_ = Shell_NotifyIconW(NIM_ADD, &data) != FALSE;
     if (trayAdded_) {
         data.uVersion = NOTIFYICON_VERSION_4;
@@ -440,7 +457,8 @@ void MainWindow::ShowTrayMenu(POINT screenPoint) {
     AppendMenuW(menu, MF_STRING | (settings_.mode == ViewMode::Compact ? MF_CHECKED : 0), CommandCompact, L"Compact Mode");
     AppendMenuW(menu, MF_STRING | (settings_.mode == ViewMode::Expanded ? MF_CHECKED : 0), CommandExpanded, L"Expanded Mode");
     AppendMenuW(menu, MF_STRING | (settings_.alwaysOnTop ? MF_CHECKED : 0), CommandAlwaysOnTop, L"Always on Top");
-    AppendMenuW(menu, MF_STRING | (settings_.clickThrough ? MF_CHECKED : 0), CommandClickThrough, L"Click-through (restore: Ctrl+Alt+P)");
+    AppendMenuW(menu, MF_STRING | (settings_.clickThrough ? MF_CHECKED : 0), CommandClickThrough, L"Click-through (restore: Ctrl+Alt+O)");
+    AppendMenuW(menu, MF_STRING | (settings_.startWithWindows ? MF_CHECKED : 0), CommandStartWithWindows, L"Start with Windows");
     AppendMenuW(refresh, MF_STRING | (settings_.refreshIntervalMs == 250 ? MF_CHECKED : 0), CommandRefresh250, L"250 ms (higher CPU use)");
     AppendMenuW(refresh, MF_STRING | (settings_.refreshIntervalMs == 500 ? MF_CHECKED : 0), CommandRefresh500, L"500 ms");
     AppendMenuW(refresh, MF_STRING | (settings_.refreshIntervalMs == 1000 ? MF_CHECKED : 0), CommandRefresh1000, L"1000 ms (default)");

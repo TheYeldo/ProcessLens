@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ProcessLens VERSION 1.0.0 LANGUAGES CXX RC)
+project(ProcessLens VERSION 1.0.1 LANGUAGES CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "ProcessLens is a native Windows application and requires Windows.")

@@ -30,6 +30,7 @@ private:
     void SetMode(ViewMode mode);
     void SetAlwaysOnTop(bool enabled);
     void SetClickThrough(bool enabled);
+    void SetStartWithWindows(bool enabled);
     void SetRefreshInterval(int milliseconds);
     void ShowTrayMenu(POINT screenPoint);
     void AddTrayIcon();

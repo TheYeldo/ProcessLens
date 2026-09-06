@@ -79,11 +79,13 @@ void TestSettings() {
     expected.mode = processlens::ViewMode::Expanded;
     expected.alwaysOnTop = true;
     expected.clickThrough = true;
+    expected.startWithWindows = false;
     expected.refreshIntervalMs = 500;
     const auto parsed = processlens::Settings::FromJson(expected.ToJson());
     Check(parsed.x == expected.x && parsed.y == expected.y && parsed.width == expected.width &&
           parsed.height == expected.height && parsed.mode == expected.mode &&
           parsed.alwaysOnTop == expected.alwaysOnTop && parsed.clickThrough == expected.clickThrough &&
+          parsed.startWithWindows == expected.startWithWindows &&
           parsed.refreshIntervalMs == expected.refreshIntervalMs,
           "settings JSON round-trips");
     Check(processlens::Settings::FromJson(R"({"refreshIntervalMs": 333})").refreshIntervalMs == 1000,

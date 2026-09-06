@@ -3,11 +3,31 @@
 #include "processlens/LauncherShortcut.hpp"
 #include "processlens/Logging.hpp"
 #include "processlens/MainWindow.hpp"
+#include "processlens/Settings.hpp"
 #include "processlens/WindowProtocol.hpp"
 
 #include <objbase.h>
+#include <shellapi.h>
 
 namespace processlens {
+namespace {
+
+bool HasBackgroundArgument() {
+    int argumentCount = 0;
+    LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
+    if (!arguments) return false;
+    bool found = false;
+    for (int index = 1; index < argumentCount; ++index) {
+        if (wcscmp(arguments[index], L"--background") == 0) {
+            found = true;
+            break;
+        }
+    }
+    LocalFree(arguments);
+    return found;
+}
+
+} // namespace
 
 int App::Run(HINSTANCE instance, int commandShow) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -27,7 +47,11 @@ int App::Run(HINSTANCE instance, int commandShow) {
 
     const HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (!EnsureLauncherShortcut()) {
-        LogWarningOnce(L"launcher-shortcut", L"Unable to create the Ctrl+Alt+P Start Menu shortcut");
+        LogWarningOnce(L"launcher-shortcut", L"Unable to create the ProcessLens Start Menu shortcut");
+    }
+    const auto persistedSettings = Settings::Load();
+    if (persistedSettings.startWithWindows && !SetStartupEnabled(true)) {
+        LogWarningOnce(L"startup-shortcut", L"Unable to create the per-user startup shortcut");
     }
 
     MainWindow window(instance);
@@ -36,7 +60,7 @@ int App::Run(HINSTANCE instance, int commandShow) {
         CloseHandle(instanceMutex);
         return 1;
     }
-    window.Show(commandShow);
+    window.Show(HasBackgroundArgument() ? SW_HIDE : commandShow);
 
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {

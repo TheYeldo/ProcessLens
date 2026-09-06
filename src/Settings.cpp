@@ -40,6 +40,7 @@ std::string Settings::ToJson() const {
          << "  \"mode\": \"" << (mode == ViewMode::Compact ? "compact" : "expanded") << "\",\n"
          << "  \"alwaysOnTop\": " << (alwaysOnTop ? "true" : "false") << ",\n"
          << "  \"clickThrough\": " << (clickThrough ? "true" : "false") << ",\n"
+         << "  \"startWithWindows\": " << (startWithWindows ? "true" : "false") << ",\n"
          << "  \"refreshIntervalMs\": " << refreshIntervalMs << "\n"
          << "}\n";
     return json.str();
@@ -55,6 +56,7 @@ Settings Settings::FromJson(std::string_view json) {
                         ? ViewMode::Expanded : ViewMode::Compact;
     settings.alwaysOnTop = ReadBool(json, "alwaysOnTop", settings.alwaysOnTop);
     settings.clickThrough = ReadBool(json, "clickThrough", settings.clickThrough);
+    settings.startWithWindows = ReadBool(json, "startWithWindows", settings.startWithWindows);
     const auto interval = ReadInt(json, "refreshIntervalMs", settings.refreshIntervalMs);
     settings.refreshIntervalMs = (interval == 250 || interval == 500 || interval == 1000 || interval == 2000) ? interval : 1000;
     return settings;
