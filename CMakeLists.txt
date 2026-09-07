@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ProcessLens VERSION 1.0.1 LANGUAGES CXX RC)
+project(ProcessLens VERSION 1.1.0 LANGUAGES CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "ProcessLens is a native Windows application and requires Windows.")
@@ -39,7 +39,7 @@ target_include_directories(ProcessLens PRIVATE include)
 target_compile_definitions(ProcessLens PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00 NTDDI_VERSION=0x0A000000)
 target_link_libraries(ProcessLens PRIVATE
     processlens_core
-    d2d1 dwrite dwmapi psapi iphlpapi shell32 ole32 user32 gdi32 comctl32 advapi32
+    d2d1 dwrite dwmapi psapi iphlpapi pdh shell32 ole32 user32 gdi32 comctl32 advapi32
 )
 if(MSVC)
     target_compile_options(ProcessLens PRIVATE /W4 /permissive- /EHsc /utf-8)
@@ -53,8 +53,11 @@ set_target_properties(ProcessLens PROPERTIES
 
 if(PROCESSLENS_BUILD_TESTS)
     enable_testing()
-    add_executable(ProcessLensTests tests/TestMain.cpp)
-    target_link_libraries(ProcessLensTests PRIVATE processlens_core)
+    add_executable(ProcessLensTests
+        tests/TestMain.cpp
+        src/GpuCollector.cpp
+    )
+    target_link_libraries(ProcessLensTests PRIVATE processlens_core pdh)
     target_compile_definitions(ProcessLensTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00 NTDDI_VERSION=0x0A000000)
     if(MSVC)
         target_compile_options(ProcessLensTests PRIVATE /W4 /permissive- /EHsc /utf-8)

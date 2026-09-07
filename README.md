@@ -6,7 +6,7 @@ ProcessLens is a small dark desktop widget for Windows 10 and Windows 11. It rea
 
 ## Features
 
-- Compact widget with CPU and memory graphs, network throughput, GPU availability, and top-five processes.
+- Compact widget with CPU, memory, and GPU graphs, network throughput, and top-five processes.
 - Expanded process monitor with sortable CPU, working-set, disk-read, and disk-write columns.
 - Live search by executable name or PID and a process details panel.
 - Confirmed, user-initiated process termination with access-denied handling.
@@ -29,7 +29,7 @@ The application deliberately uses live counters, so the exact graphs and process
 Windows APIs
      |
      v
-Collectors (CPU / memory / network / processes / GPU capability)
+Collectors (CPU / memory / network / processes / GPU engines)
      |
      v
 Metrics worker (std::jthread, 250-2000 ms)
@@ -55,8 +55,9 @@ The UI thread never enumerates processes or network adapters. The worker creates
 | Network | `GetIfTable2` | summed connected, up, non-loopback adapter octet deltas per second |
 | Process I/O | `GetProcessIoCounters` | transfer-byte deltas per second |
 | Process inventory | Tool Help snapshot API | PID, executable name, and thread count |
+| GPU | PDH `GPU Engine(*)\\Utilization Percentage` | sum process instances per physical engine, then select the busiest engine |
 
-GPU collection is intentionally isolated and currently reports `N/A`. Windows GPU engine counters cannot be summed blindly: engines and physical adapters must be correlated to avoid publishing a believable but incorrect number. This does not affect other collectors.
+GPU collection uses the vendor-neutral Windows GPU engine counters introduced with WDDM 2.0. It mirrors Task Manager's overall-utilization semantics by grouping process instances by physical engine and displaying the busiest engine rather than summing unrelated engines. On systems without compatible counters, the widget safely reports `N/A` and the other collectors continue normally.
 
 Protected and short-lived processes are expected. When Windows denies access or a process exits during collection, ProcessLens retains the Tool Help information it can read and uses zero/`N/A` for unavailable fields.
 
@@ -107,7 +108,7 @@ assets/                reserved for packaged icon assets
 
 ## Tests
 
-The test executable covers system CPU delta calculation, process CPU normalization, byte formatting, graph wraparound, process sorting/filtering, settings JSON round-tripping, and network rate calculation.
+The test executable covers system CPU delta calculation, process CPU normalization, GPU-engine aggregation, byte formatting, graph wraparound, process sorting/filtering, settings JSON round-tripping, and network rate calculation.
 
 ```powershell
 ctest --test-dir build -C Release --output-on-failure
@@ -115,7 +116,6 @@ ctest --test-dir build -C Release --output-on-failure
 
 ## Roadmap
 
-1. Correlate GPU engine PDH instances to physical adapters and processes for a trustworthy aggregate.
-2. Add signed application icons and an installer.
-3. Add opt-in startup, opacity, and threshold notifications.
-4. Add process executable paths and icons where permissions allow.
+1. Add signed application icons and an installer.
+2. Add opacity and threshold notifications.
+3. Add process executable paths and icons where permissions allow.

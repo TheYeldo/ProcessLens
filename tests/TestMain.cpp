@@ -1,12 +1,15 @@
 #include "processlens/Calculations.hpp"
 #include "processlens/Formatting.hpp"
+#include "processlens/GpuCollector.hpp"
 #include "processlens/GraphBuffer.hpp"
 #include "processlens/Settings.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -98,6 +101,46 @@ void TestNetworkDelta() {
     Check(processlens::CalculateRate(1000, 4000, 0.0) == 0, "zero network interval is safe");
 }
 
+void TestGpuAggregation() {
+    using processlens::GpuEngineUtilization;
+    const std::vector<GpuEngineUtilization> samples{
+        {L"pid_100_luid_0x0_0x1_phys_0_eng_0_engtype_3D", 21.0},
+        {L"pid_200_luid_0x0_0x1_phys_0_eng_0_engtype_3D", 24.0},
+        {L"pid_100_luid_0x0_0x1_phys_0_eng_1_engtype_Copy", 62.0},
+        {L"pid_300_luid_0x0_0x2_phys_0_eng_0_engtype_3D", 55.0},
+    };
+    const auto overall = processlens::CalculateOverallGpuPercent(samples);
+    Check(overall.has_value(), "GPU aggregation returns a value for valid samples");
+    CheckNear(overall.value_or(0.0), 62.0, 0.001,
+              "GPU aggregation sums processes per engine and selects the busiest engine");
+
+    const auto clamped = processlens::CalculateOverallGpuPercent({
+        {L"pid_1_luid_0x0_0x1_phys_0_eng_0_engtype_3D#1", 70.0},
+        {L"pid_2_luid_0x0_0x1_phys_0_eng_0_engtype_3D#2", 60.0},
+    });
+    CheckNear(clamped.value_or(0.0), 100.0, 0.001,
+              "GPU aggregation removes duplicate suffixes and clamps engine totals");
+
+    Check(!processlens::CalculateOverallGpuPercent({
+               {L"", 50.0}, {L"invalid", -1.0}, {L"nan", std::nan("")}})
+               .has_value(),
+          "GPU aggregation ignores invalid samples");
+}
+
+void TestLiveGpuCollector() {
+    processlens::GpuCollector collector;
+    (void)collector.Collect();
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    const auto sample = collector.Collect();
+    Check(!sample || (*sample >= 0.0 && *sample <= 100.0),
+          "live GPU collector returns unavailable or a bounded percentage");
+    if (sample) {
+        std::cout << "Live GPU sample: " << *sample << "%\n";
+    } else {
+        std::cout << "Live GPU counters unavailable on this runner.\n";
+    }
+}
+
 } // namespace
 
 int main() {
@@ -110,6 +153,8 @@ int main() {
         TestFiltering();
         TestSettings();
         TestNetworkDelta();
+        TestGpuAggregation();
+        TestLiveGpuCollector();
     } catch (const std::exception& error) {
         std::cerr << "Unexpected exception: " << error.what() << '\n';
         return 2;

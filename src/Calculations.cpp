@@ -1,7 +1,9 @@
 #include "processlens/Calculations.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cwctype>
+#include <unordered_map>
 
 namespace processlens {
 namespace {
@@ -18,6 +20,23 @@ void SortWithDirection(std::vector<ProcessMetrics>& processes, bool ascending, L
     std::stable_sort(processes.begin(), processes.end(), [&](const auto& lhs, const auto& rhs) {
         return ascending ? less(lhs, rhs) : less(rhs, lhs);
     });
+}
+
+std::wstring GpuEngineKey(std::wstring_view instanceName) {
+    const auto luidPosition = instanceName.find(L"_luid_");
+    auto key = luidPosition == std::wstring_view::npos
+                   ? instanceName
+                   : instanceName.substr(luidPosition);
+
+    // PDH can append #<index> when Windows exposes duplicate instance names.
+    // That suffix does not identify a different physical engine.
+    const auto hashPosition = key.rfind(L'#');
+    if (hashPosition != std::wstring_view::npos && hashPosition + 1 < key.size() &&
+        std::all_of(key.begin() + static_cast<std::ptrdiff_t>(hashPosition + 1), key.end(),
+                    [](wchar_t ch) { return std::iswdigit(ch) != 0; })) {
+        key = key.substr(0, hashPosition);
+    }
+    return std::wstring(key);
 }
 
 } // namespace
@@ -60,6 +79,28 @@ std::uint64_t CalculateRate(std::uint64_t previousBytes,
     }
     return static_cast<std::uint64_t>(static_cast<double>(currentBytes - previousBytes) /
                                       elapsedSeconds);
+}
+
+std::optional<double> CalculateOverallGpuPercent(
+    const std::vector<GpuEngineUtilization>& samples) {
+    std::unordered_map<std::wstring, double> engineTotals;
+    for (const auto& sample : samples) {
+        if (sample.instanceName.empty() || !std::isfinite(sample.percent) || sample.percent < 0.0) {
+            continue;
+        }
+        engineTotals[GpuEngineKey(sample.instanceName)] += sample.percent;
+    }
+
+    if (engineTotals.empty()) {
+        return std::nullopt;
+    }
+
+    double busiestEngine = 0.0;
+    for (const auto& [engine, total] : engineTotals) {
+        (void)engine;
+        busiestEngine = std::max(busiestEngine, std::clamp(total, 0.0, 100.0));
+    }
+    return busiestEngine;
 }
 
 void SortProcesses(std::vector<ProcessMetrics>& processes,
