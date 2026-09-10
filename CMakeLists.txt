@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ProcessLens VERSION 1.1.0 LANGUAGES CXX RC)
+project(ProcessLens VERSION 2.0.0 LANGUAGES CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "ProcessLens is a native Windows application and requires Windows.")
@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(PROCESSLENS_BUILD_TESTS "Build ProcessLens unit tests" ON)
+
+# The downloadable executable runs without a separate Visual C++ runtime install.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(processlens_core STATIC
     src/Calculations.cpp

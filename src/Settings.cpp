@@ -41,7 +41,11 @@ std::string Settings::ToJson() const {
          << "  \"alwaysOnTop\": " << (alwaysOnTop ? "true" : "false") << ",\n"
          << "  \"clickThrough\": " << (clickThrough ? "true" : "false") << ",\n"
          << "  \"startWithWindows\": " << (startWithWindows ? "true" : "false") << ",\n"
-         << "  \"refreshIntervalMs\": " << refreshIntervalMs << "\n"
+         << "  \"refreshIntervalMs\": " << refreshIntervalMs << ",\n"
+         << "  \"language\": " << (language == Language::Russian ? 0 : 1) << ",\n"
+         << "  \"accent\": " << accent << ",\n"
+         << "  \"opacityPercent\": " << opacityPercent << ",\n"
+         << "  \"animations\": " << (animations ? "true" : "false") << "\n"
          << "}\n";
     return json.str();
 }
@@ -59,6 +63,10 @@ Settings Settings::FromJson(std::string_view json) {
     settings.startWithWindows = ReadBool(json, "startWithWindows", settings.startWithWindows);
     const auto interval = ReadInt(json, "refreshIntervalMs", settings.refreshIntervalMs);
     settings.refreshIntervalMs = (interval == 250 || interval == 500 || interval == 1000 || interval == 2000) ? interval : 1000;
+    settings.language = ReadInt(json, "language", 0) == 1 ? Language::English : Language::Russian;
+    settings.accent = std::clamp(ReadInt(json, "accent", 0), 0, 2);
+    settings.opacityPercent = std::clamp(ReadInt(json, "opacityPercent", 100), 70, 100);
+    settings.animations = ReadBool(json, "animations", true);
     return settings;
 }
 

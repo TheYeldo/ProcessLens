@@ -16,6 +16,9 @@ struct ProcessMetrics {
     std::uint64_t writeBytesPerSecond{};
     std::uint32_t threadCount{};
     std::optional<std::wstring> startTime;
+    std::wstring executablePath;
+    std::uint64_t creationTime{};
+    bool accessible{};
 };
 
 struct MetricsSnapshot {
@@ -32,6 +35,9 @@ struct MetricsSnapshot {
     std::vector<float> gpuHistory;
     std::vector<float> networkHistory;
     std::vector<ProcessMetrics> processes;
+    std::uint64_t uptimeSeconds{};
+    std::uint32_t logicalProcessors{};
+    std::uint64_t sequence{};
 };
 
 } // namespace processlens

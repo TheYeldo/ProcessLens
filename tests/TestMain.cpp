@@ -3,6 +3,7 @@
 #include "processlens/GpuCollector.hpp"
 #include "processlens/GraphBuffer.hpp"
 #include "processlens/Settings.hpp"
+#include "processlens/UiState.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -46,6 +47,13 @@ void TestFormatting() {
     Check(processlens::FormatBytes(12'700) == L"12.4 KB", "formats kibibyte-sized values");
     Check(processlens::FormatBytes(5'054'644'019ULL) == L"4.71 GB", "formats gibibyte-sized values");
     Check(processlens::FormatRate(1024) == L"1.00 KB/s", "formats transfer rates");
+    using processlens::Language;
+    Check(processlens::FormatBytes(5'054'644'019ULL, Language::Russian) == L"4,71 ГБ",
+          "Russian byte units and decimal separator");
+    Check(processlens::FormatRate(1024, Language::Russian) == L"1,00 КБ/с", "Russian rate units");
+    Check(processlens::FormatPercent(12.5, 1, Language::Russian) == L"12,5%", "Russian percentages");
+    Check(processlens::FormatUptime(90060, Language::Russian) == L"1 д 1 ч 1 мин", "uptime across a day boundary");
+    Check(processlens::FormatUptime(0, Language::English) == L"0h 0m", "zero uptime");
 }
 
 void TestGraphBuffer() {
@@ -84,15 +92,40 @@ void TestSettings() {
     expected.clickThrough = true;
     expected.startWithWindows = false;
     expected.refreshIntervalMs = 500;
+    expected.language = processlens::Language::English;
+    expected.accent = 2;
+    expected.opacityPercent = 85;
+    expected.animations = false;
     const auto parsed = processlens::Settings::FromJson(expected.ToJson());
     Check(parsed.x == expected.x && parsed.y == expected.y && parsed.width == expected.width &&
           parsed.height == expected.height && parsed.mode == expected.mode &&
           parsed.alwaysOnTop == expected.alwaysOnTop && parsed.clickThrough == expected.clickThrough &&
           parsed.startWithWindows == expected.startWithWindows &&
-          parsed.refreshIntervalMs == expected.refreshIntervalMs,
+          parsed.refreshIntervalMs == expected.refreshIntervalMs && parsed.language == expected.language &&
+          parsed.accent == expected.accent && parsed.opacityPercent == expected.opacityPercent &&
+          parsed.animations == expected.animations,
           "settings JSON round-trips");
     Check(processlens::Settings::FromJson(R"({"refreshIntervalMs": 333})").refreshIntervalMs == 1000,
           "settings rejects unsupported refresh interval");
+    const auto legacy = processlens::Settings::FromJson(R"({"mode":"expanded","refreshIntervalMs":500})");
+    Check(legacy.language == processlens::Language::Russian && legacy.opacityPercent == 100 && legacy.animations,
+          "v1 settings migrate to Russian with full opacity and animations");
+    const auto invalid = processlens::Settings::FromJson(R"({"accent":9,"opacityPercent":4,"language":9})");
+    Check(invalid.accent == 2 && invalid.opacityPercent == 70 && invalid.language == processlens::Language::Russian,
+          "invalid appearance settings stay in supported ranges");
+}
+
+void TestInteractionBoundaries() {
+    Check(processlens::ClampScrollOffset(500, 40, 8) == 32, "scroll stops at last full page");
+    Check(processlens::ClampScrollOffset(32, 3, 8) == 0, "filtering clamps stale scroll offset");
+    Check(processlens::ClampScrollOffset(-3, 40, 8) == 0, "scroll cannot become negative");
+    Check(processlens::VisibleRowCount(820) == 8, "table leaves space for footer");
+    Check(processlens::VisibleRowCount(200) == 0, "small window never has negative rows");
+    CheckNear(processlens::EaseOutCubic(-1), 0, .0001, "animation starts at zero");
+    CheckNear(processlens::EaseOutCubic(2), 1, .0001, "animation settles at one");
+    const processlens::HitTarget target{processlens::Action::Settings, 0, 10, 20, 40, 50};
+    Check(target.Contains(10, 20) && !target.Contains(40, 50) && !target.Contains(9, 20),
+          "hit testing uses consistent half-open bounds");
 }
 
 void TestNetworkDelta() {
@@ -152,6 +185,7 @@ int main() {
         TestSorting();
         TestFiltering();
         TestSettings();
+        TestInteractionBoundaries();
         TestNetworkDelta();
         TestGpuAggregation();
         TestLiveGpuCollector();

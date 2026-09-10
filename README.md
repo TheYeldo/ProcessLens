@@ -1,121 +1,162 @@
 # ProcessLens
 
-Real-time native Windows system monitor written in modern C++.
+### Your PC, at a glance.
 
-ProcessLens is a small dark desktop widget for Windows 10 and Windows 11. It reads live operating-system counters on a background thread and renders them with Direct2D and DirectWrite—there is no browser, web server, Electron runtime, or managed UI layer.
+A native Windows system monitor with a compact desktop widget, live performance graphs, and a focused process explorer. Built with C++20, Win32, Direct2D, and DirectWrite.
 
-## Features
+[Download for Windows x64](https://github.com/TheYeldo/ProcessLens/releases/latest) · [Русский](README.ru.md) · [Build status](https://github.com/TheYeldo/ProcessLens/actions)
 
-- Compact widget with CPU, memory, and GPU graphs, network throughput, and top-five processes.
-- Expanded process monitor with sortable CPU, working-set, disk-read, and disk-write columns.
-- Live search by executable name or PID and a process details panel.
-- Confirmed, user-initiated process termination with access-denied handling.
-- Frameless resizable dark window, Windows 11 rounded corners, per-monitor DPI V2, and multi-monitor position recovery.
-- Always-on-top and click-through modes. The tray icon or `Ctrl+Alt+O` always restores interaction.
-- ProcessLens starts hidden at user sign-in by default, keeping `Ctrl+Alt+O` available without showing a window. The tray menu can disable **Start with Windows**.
-- A regular Start Menu launcher is installed for manual starts; subsequent launches activate the existing single instance.
-- Refresh intervals of 250, 500, 1000, and 2000 ms; 1000 ms is the default.
-- Local JSON settings in `%LOCALAPPDATA%\ProcessLens\config.json`.
+## What's new in 2.0
 
-Double-click the widget, or use the `+`/`-` title button, to switch between compact and expanded modes. Click **by CPU / by RAM** in compact mode to change the top-process ranking.
+- A redesigned graphite interface: spacious metric cards, crisp typography, accent-colored graphs, hover states, and an original app icon.
+- A 240 ms fade-and-slide entrance and 180 ms graph transitions. Windows reduced-motion preferences are respected; animations can also be disabled.
+- Russian and English, switchable immediately. Russian is the default, including localized units, decimal separators, menus, settings, and confirmations.
+- A settings panel: Mint / Ice / Iris accents, 70–100% opacity, animations, startup, click-through, and sampling interval.
+- Freeze the current view to inspect a busy process list. Collection continues in the background; resume returns to the latest snapshot.
+- System uptime, logical processor count, available memory, executable folder access, and copying a process path.
+- Safer process actions: a held process handle and creation-time verification protect against PID reuse; critical Windows processes and ProcessLens itself cannot be ended here.
+- A self-contained executable with the C++ runtime linked statically.
 
 ## Screenshots
 
-The application deliberately uses live counters, so the exact graphs and process rows vary per machine. Build and launch `ProcessLens.exe` to see the compact widget; double-click it for the expanded process table.
+Real Windows captures, with live operating-system counters.
+
+![Expanded monitor in Russian](assets/screenshots/overview.jpg)
+
+![Compact desktop widget](assets/screenshots/widget.jpg)
+
+## Features
+
+CPU, memory, vendor-neutral GPU utilization, and network throughput update automatically. The expanded table supports sorting by name, PID, CPU, working set, and process I/O. Search works by name or PID; click a row for details. The mini-widget shows the top five processes, ranked by CPU or RAM.
+
+The window is frameless, resizable, DPI-aware, and movable by its title bar. It can stay on top or allow clicks to pass through it. Closing hides it in the system tray. The tray menu also offers an explicit **Exit** command.
+
+## Quick start
+
+1. Download **ProcessLens.exe** from [Releases](https://github.com/TheYeldo/ProcessLens/releases/latest).
+2. Keep it in a permanent folder and run it. No administrator rights or separate runtime installation are needed.
+3. Press **Ctrl+Alt+O** to reveal the widget from another application.
+4. Use **Expand / Mini widget**, or double-click the title bar, to change modes.
+5. Open the gear button to choose language, accent, opacity, and refresh interval.
+
+The first launch creates per-user Start Menu and Startup shortcuts pointing to the current executable. Startup launches ProcessLens hidden at sign-in so the global hotkey is available. Disable **Start with Windows** in settings or in the tray menu. If you move the executable, run it once from its new location to refresh the shortcuts.
+
+If another application owns Ctrl+Alt+O, ProcessLens displays a message and remains accessible from the tray. The shortcut restores interaction even when click-through is enabled.
+
+## Controls
+
+| Control | Action |
+|---|---|
+| Ctrl+Alt+O | Reveal ProcessLens and restore interaction |
+| Ctrl+F | Open expanded mode and focus search |
+| Ctrl+A / Ctrl+V | Select all / paste in search |
+| Space | Pause or resume the displayed snapshot, outside search |
+| Ctrl+, | Open settings |
+| Tab / Shift+Tab | Move between controls |
+| Enter | Activate the focused control; never confirms termination |
+| Up / Down | Select a process, outside search |
+| Esc | Dismiss confirmation, settings, details, or search; then hide |
+| Mouse wheel | Scroll the process table |
+| Double-click title bar | Switch compact / expanded modes |
+
+Ending a process always opens an in-app confirmation with **Cancel** and **End process**. No process is terminated automatically. Access failures and processes exiting while being inspected are handled without elevation.
 
 ## Architecture
 
 ```text
 Windows APIs
-     |
-     v
-Collectors (CPU / memory / network / processes / GPU engines)
-     |
-     v
-Metrics worker (std::jthread, 250-2000 ms)
-     |
-     v
-immutable shared snapshot (atomic publication)
-     |
-     +-------------------+
-     v                   v
-Compact Direct2D UI  Expanded Direct2D UI
+     │
+     ▼
+MetricsCollector + GpuCollector
+     │  background std::jthread · 250–2000 ms
+     ▼
+atomic shared_ptr<const MetricsSnapshot>
+     │
+     ▼
+MainWindow: displayed snapshot + UI state
+     │
+     ├── cached sorted / filtered process list
+     ├── pause, selection, process-handle checks
+     └── short-lived animation timer
+                    │
+                    ▼
+           Direct2D / DirectWrite
+            widget + dashboard
 ```
 
-The UI thread never enumerates processes or network adapters. The worker creates a complete `MetricsSnapshot`, atomically publishes `shared_ptr<const MetricsSnapshot>`, and posts a lightweight repaint message. Histories use bounded circular buffers containing the latest 120 samples.
+Sampling never runs on the UI thread. Rendering and input share the same hit-target geometry. The displayed snapshot is held consistently during input and drawing. Process paths are cached by PID and creation time.
 
-## Metrics Collection
+## Metrics collection
 
-| Metric | Windows source | Calculation |
+| Metric | Source | Calculation |
 |---|---|---|
-| Total CPU | `GetSystemTimes` | `(totalDelta - idleDelta) / totalDelta` |
-| Process CPU | `OpenProcess`, `GetProcessTimes` | process-time delta divided by wall-time delta and logical processor count |
-| Physical memory | `GlobalMemoryStatusEx` | total, available, used, and load percentage |
-| Process memory | `GetProcessMemoryInfo` | current working set |
-| Network | `GetIfTable2` | summed connected, up, non-loopback adapter octet deltas per second |
-| Process I/O | `GetProcessIoCounters` | transfer-byte deltas per second |
-| Process inventory | Tool Help snapshot API | PID, executable name, and thread count |
-| GPU | PDH `GPU Engine(*)\\Utilization Percentage` | sum process instances per physical engine, then select the busiest engine |
+| System CPU | GetSystemTimes | Busy time / total elapsed CPU time |
+| Process CPU | GetProcessTimes | Process-time delta / wall-time delta / logical processor count |
+| Physical memory | GlobalMemoryStatusEx | Total, used, available, and percentage |
+| Process memory | GetProcessMemoryInfo | Working set |
+| GPU | PDH GPU Engine utilization counters | Sum process samples per physical engine, then take the busiest engine |
+| Network | GetIfTable2 | Connected non-loopback adapter byte deltas / elapsed time |
+| Process I/O | GetProcessIoCounters | Read/write transfer-byte deltas / elapsed time |
+| Processes / threads | Tool Help snapshot | Executable name, PID, thread count |
+| Executable path | QueryFullProcessImageNameW | Cached by process creation identity |
+| System uptime | GetTickCount64 | Time since Windows started |
 
-GPU collection uses the vendor-neutral Windows GPU engine counters introduced with WDDM 2.0. It mirrors Task Manager's overall-utilization semantics by grouping process instances by physical engine and displaying the busiest engine rather than summing unrelated engines. On systems without compatible counters, the widget safely reports `N/A` and the other collectors continue normally.
+Process I/O includes transfers reported by Windows for the process; it is not a physical-disk utilization counter. GPU requires compatible Windows/WDDM counters and displays an unavailable state otherwise. The busiest-engine rule follows [Microsoft's description of Task Manager GPU metrics](https://devblogs.microsoft.com/directx/gpus-in-the-task-manager/).
 
-Protected and short-lived processes are expected. When Windows denies access or a process exits during collection, ProcessLens retains the Tool Help information it can read and uses zero/`N/A` for unavailable fields.
+Graphs retain 120 samples (about two minutes at the default 1-second interval). Network graphs scale to their recent peak. Transitions interpolate only the visual presentation; the process table and actions use collected values.
 
 ## Building
 
-Requirements:
-
-- Windows 10 or Windows 11 x64
-- Visual Studio with the **Desktop development with C++** workload
-- CMake 3.24 or newer
-- Windows 10/11 SDK
+Requirements: Windows 10/11 x64, Visual Studio with **Desktop development with C++**, Windows SDK, and CMake 3.24+.
 
 From a Developer PowerShell for Visual Studio:
 
 ```powershell
 cmake -S . -B build -A x64
-cmake --build build --config Release
+cmake --build build --config Release --parallel
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-The executable is written to `build\Release\ProcessLens.exe` for a Visual Studio generator.
+Output: **build\Release\ProcessLens.exe**. Visual Studio's bundled CMake can be used if it is not in PATH. The icon is checked in; rebuilding it is optional:
 
-If `cmake` or `cl` is not visible in an ordinary PowerShell, use **Developer PowerShell for VS** or invoke the CMake installed under the Visual Studio installation.
+```powershell
+.\tools\GenerateIcon.ps1
+```
 
-## Usage
+## Performance and settings
 
-- Drag the title area to move the widget; drag any edge to resize it.
-- Double-click to switch modes.
-- In expanded mode, click a column header to sort and click it again to reverse direction.
-- Click the search field and type a process name or PID. `Esc` closes details first, then clears search.
-- Click a row for details. **End Process** always displays a confirmation prompt and never elevates the application.
-- Right-click the tray icon for mode, topmost, click-through, refresh-rate, and exit controls.
-- Press `Ctrl+Alt+O` from anywhere to reveal ProcessLens. On first run it creates per-user Start Menu and Startup shortcuts; the Startup entry launches it hidden at sign-in so the system-wide hotkey remains registered. Disable this behavior with **Start with Windows** in the tray menu.
-- Closing the custom title bar hides the window to the tray. Choose **Exit** from the tray to stop the application.
+The default sampling interval is 1000 ms. Choose 250, 500, 1000, or 2000 ms in settings. 250 ms performs four times as many scans and increases CPU use.
 
-## Performance
+A frame timer runs only while entrance or metric transitions are active. A hidden or minimized window does not animate; collection continues so reopening has recent history. Pausing freezes the view, not the collector.
 
-Process enumeration, system sampling, and rendering occur once per selected refresh interval. Window interactions can trigger additional repaints, but there is no busy animation timer while the snapshot is unchanged. The 250 ms interval performs four times as many process scans as the default and may noticeably increase ProcessLens CPU usage on systems with many processes.
+Preferences are saved in **%LOCALAPPDATA%\ProcessLens\config.json**. Existing v1 settings are read with defaults for the new appearance fields. Window position and size are recovered onto an available monitor.
 
-## Project Structure
+## Project structure
 
 ```text
-include/processlens/   public types, calculations, worker, renderer, and window APIs
-src/                   Win32 implementation and Windows collectors
-resources/             DPI-aware as-invoker application manifest
-tests/                 dependency-free unit tests for deterministic logic
-assets/                reserved for packaged icon assets
+include/processlens/  models, localization, UI state, calculations, APIs
+src/                  Win32 window, collectors, renderer, formatting
+resources/            manifest and executable version information
+assets/               multi-resolution icon and application screenshots
+tools/                reproducible icon generator
+tests/                calculations, settings, interaction boundaries, GPU smoke test
+.github/workflows/    Windows x64 build, tests, executable artifact
 ```
 
 ## Tests
 
-The test executable covers system CPU delta calculation, process CPU normalization, GPU-engine aggregation, byte formatting, graph wraparound, process sorting/filtering, settings JSON round-tripping, and network rate calculation.
+Tests cover CPU deltas, per-process normalization, GPU aggregation, byte/rate/uptime formatting in both languages, graph buffers, process sorting and filtering, settings round-trip and v1 migration, invalid preference values, scroll boundaries, easing endpoints, and hit-test boundaries.
 
-```powershell
-ctest --test-dir build -C Release --output-on-failure
-```
+A live GPU smoke test accepts either a valid percentage or unavailable counters on a headless runner. It does not substitute for deterministic aggregation tests. GitHub Actions builds and tests on windows-2022.
 
-## Roadmap
+## Known limitations
 
-1. Add signed application icons and an installer.
-2. Add opacity and threshold notifications.
-3. Add process executable paths and icons where permissions allow.
+- The executable is not digitally signed.
+- GPU temperatures, fan speeds, and per-process GPU values are not collected.
+- Restricted processes may expose only basic inventory information.
+- Custom-drawn controls support keyboard navigation but do not yet provide a full screen-reader accessibility tree.
+- Extremely small available desktop areas can constrain the dashboard; the compact widget is intended for smaller workspaces.
+
+## License
+
+[MIT](LICENSE).

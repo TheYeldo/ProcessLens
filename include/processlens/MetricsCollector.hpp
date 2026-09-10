@@ -38,6 +38,7 @@ private:
         std::uint64_t readBytes{};
         std::uint64_t writeBytes{};
         std::uint64_t creationTime{};
+        std::wstring executablePath;
     };
 
     struct NetworkTotals {
@@ -65,6 +66,7 @@ private:
     std::uint64_t kernelPrevious_{};
     std::uint64_t userPrevious_{};
     bool hasCpuPrevious_{};
+    std::uint64_t sequence_{};
     GraphBuffer cpuHistory_;
     GraphBuffer memoryHistory_;
     GraphBuffer gpuHistory_;

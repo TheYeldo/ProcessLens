@@ -10,6 +10,7 @@
 #include <iphlpapi.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 #include <unordered_set>
@@ -97,6 +98,9 @@ void MetricsCollector::Run(std::stop_token stopToken) {
 
 MetricsSnapshot MetricsCollector::Collect(double elapsedSeconds, std::uint64_t elapsed100ns) {
     MetricsSnapshot result;
+    result.uptimeSeconds = GetTickCount64() / 1000;
+    result.logicalProcessors = LogicalProcessorCount();
+    result.sequence = ++sequence_;
 
     FILETIME idle{}, kernel{}, user{};
     if (GetSystemTimes(&idle, &kernel, &user)) {
@@ -164,6 +168,7 @@ std::vector<ProcessMetrics> MetricsCollector::CollectProcesses(double elapsedSec
         metric.threadCount = entry.cntThreads;
 
         UniqueHandle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, metric.pid));
+        if (!process) process.reset(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, metric.pid));
         if (!process) {
             // The process is still listed with the information available from Toolhelp.
             result.push_back(std::move(metric));
@@ -173,12 +178,23 @@ std::vector<ProcessMetrics> MetricsCollector::CollectProcesses(double elapsedSec
         FILETIME created{}, exited{}, kernel{}, user{};
         if (GetProcessTimes(process.get(), &created, &exited, &kernel, &user)) {
             const auto creation = ToUInt64(created);
+            metric.creationTime = creation;
+            metric.accessible = true;
             const auto cpuTime = ToUInt64(kernel) + ToUInt64(user);
             const auto previous = processPrevious_.find(metric.pid);
             if (previous != processPrevious_.end() && previous->second.creationTime == creation) {
                 metric.cpuPercent = CalculateProcessCpuPercent(previous->second.cpuTime, cpuTime, elapsed100ns, processorCount);
             }
             metric.startTime = FormatStartTime(created);
+            if (previous != processPrevious_.end() && previous->second.creationTime == creation) {
+                metric.executablePath = previous->second.executablePath;
+            } else {
+                std::array<wchar_t, 32768> path{};
+                DWORD pathLength = static_cast<DWORD>(path.size());
+                if (QueryFullProcessImageNameW(process.get(), 0, path.data(), &pathLength)) {
+                    metric.executablePath.assign(path.data(), pathLength);
+                }
+            }
 
             IO_COUNTERS io{};
             std::uint64_t readBytes{};
@@ -191,7 +207,7 @@ std::vector<ProcessMetrics> MetricsCollector::CollectProcesses(double elapsedSec
                     metric.writeBytesPerSecond = CalculateRate(previous->second.writeBytes, writeBytes, elapsedSeconds);
                 }
             }
-            nextPrevious.emplace(metric.pid, ProcessPrevious{cpuTime, readBytes, writeBytes, creation});
+            nextPrevious.emplace(metric.pid, ProcessPrevious{cpuTime, readBytes, writeBytes, creation, metric.executablePath});
         }
 
         PROCESS_MEMORY_COUNTERS_EX counters{};
